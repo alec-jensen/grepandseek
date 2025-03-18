@@ -10,6 +10,10 @@ from pathlib import Path
 from whoosh.index import create_in, open_dir, exists_in
 from whoosh.fields import Schema, TEXT, ID, STORED
 
+def normalize_path(path):
+    """Normalize a path for consistent comparison"""
+    return os.path.normcase(os.path.normpath(os.path.abspath(path)))
+
 def extract_metadata(file_path):
     try:
         # Run ExifTool with the -j flag to output JSON
@@ -83,22 +87,22 @@ class Indexer():
     def add_path(self, path):
         """Add a path to be indexed"""
         # Convert to absolute path
-        abs_path = os.path.abspath(path)
+        abs_path = normalize_path(path)
         if abs_path not in self.config["indexed_paths"]:
             self.config["indexed_paths"].append(abs_path)
             self._save_config()
-            return True
-        return False
+            return abs_path
+        return None
 
     def remove_path(self, path):
         """Remove a path from indexing"""
         # Convert to absolute path
-        abs_path = os.path.abspath(path)
+        abs_path = normalize_path(path)
         if abs_path in self.config["indexed_paths"]:
             self.config["indexed_paths"].remove(abs_path)
             self._save_config()
-            return True
-        return False
+            return abs_path
+        return None
 
     def get_indexed_paths(self):
         """Get list of paths being indexed"""
@@ -164,8 +168,9 @@ class Indexer():
                 for file in files:
                     if not should_ignore(file):
                         file_path = os.path.join(root, file)
-                        files_to_process.append((root, file))
-                        valid_file_paths.add(file_path)
+                        normalized_path = normalize_path(file_path)
+                        files_to_process.append((root, file, normalized_path))
+                        valid_file_paths.add(normalized_path)
                         total_files += 1
         
         if total_files == 0:
@@ -176,7 +181,7 @@ class Indexer():
         
         # Function to process a single file in a worker thread
         def process_file(args):
-            root, file = args
+            root, file, normalized_path = args
             file_path = os.path.join(root, file)
             filename = os.path.basename(file_path)
             
@@ -186,9 +191,9 @@ class Indexer():
                 
                 # Check if file exists in index and if it's been modified
                 with self.index.searcher() as searcher:
-                    doc = searcher.document(path=file_path)
-                    if doc and 'last_updated' in doc and doc['last_updated'] == current_mtime:
-                        # File hasn't changed, no need to reindex
+                    doc = searcher.document(path=normalized_path)
+                    if doc and 'last_updated' in doc and abs(doc['last_updated'] - current_mtime) < 0.001:
+                        # File hasn't changed, no need to reindex (using small epsilon for float comparison)
                         return None
                 
                 # Convert EXIF data to string
@@ -208,7 +213,7 @@ class Indexer():
                 
                 # Return the document data to be added to the index
                 return {
-                    "path": file_path,
+                    "path": normalized_path,  # Store normalized path
                     "filename": filename,
                     "exif": exif_str,
                     "content": content,
@@ -231,7 +236,7 @@ class Indexer():
                 
                 # Process results as they complete
                 for future in concurrent.futures.as_completed(future_to_file):
-                    root, file = future_to_file[future]
+                    root, file, normalized_path = future_to_file[future]
                     file_path = os.path.join(root, file)
                     
                     processed_files += 1
@@ -268,10 +273,14 @@ class Indexer():
         print("Checking for documents to remove...")
         to_delete = []
         
-        with self.index.searcher() as searcher:
-            for doc in searcher.all_stored_fields():
-                if 'path' in doc and doc['path'] not in valid_file_paths:
-                    to_delete.append(doc['path'])
+        reader = self.index.reader()
+
+        if reader is None:
+            return False
+        
+        for doc in reader.all_stored_fields():
+            if 'path' in doc and doc['path'] not in valid_file_paths:
+                to_delete.append(doc['path'])
         
         if to_delete:
             print(f"Removing {len(to_delete)} documents that now match ignore patterns...")

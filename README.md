@@ -33,6 +33,37 @@ cd grepandseek
 pip install -r requirements.txt
 ```
 
+### Setting Up Scheduled Indexing
+
+To keep your index up-to-date, you can set up a scheduled task to run the indexer at regular intervals.
+
+#### Windows
+
+1. Open Task Scheduler
+2. Click "Create Basic Task"
+3. Name your task and click "Next"
+4. Choose "Daily" and click "Next"
+5. Set the time and frequency for your task and click "Next"
+6. Choose "Start a program" and click "Next"
+7. Browse to the `grepandseek` directory and select `indexer.bat`
+8. Click "Next" and then "Finish"
+
+#### Linux
+
+1. Open crontab with `crontab -e`
+2. Add a line to run the indexer at your desired interval, e.g. `0 0 * * * cd /path/to/grepandseek && python -m grepandseek.main indexer update-index -s`
+3. Save and exit
+
+#### macOS (untested)
+
+1. Open Automator
+2. Create a new Application
+3. Add a "Run Shell Script" action
+4. Set the shell to `/bin/bash` and the script to `cd /path/to/grepandseek && python -m grepandseek.main indexer update-index -s`
+5. Save the application
+6. Open System Preferences > Users & Groups > Login Items
+7. Add your Automator application to the list
+
 ## Getting Started
 
 ### Initial Setup

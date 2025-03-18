@@ -120,11 +120,11 @@ def main():
             update_index_with_progress(indexer, console, "Initializing index")
             console.print(f"[green]Index initialized![/green]")
         elif args.indexer_command == "add":
-            indexer.add_path(args.path)
-            console.print(f"[green]Path '{args.path}' added to index![/green]")
+            path = indexer.add_path(args.path)
+            console.print(f"[green]Path '{path}' added to index![/green]")
         elif args.indexer_command == "remove":
-            indexer.remove_path(args.path)
-            console.print(f"[green]Path '{args.path}' removed from index![/green]")
+            path = indexer.remove_path(args.path)
+            console.print(f"[green]Path '{path}' removed from index![/green]")
         elif args.indexer_command == "list":
             indexed_paths = indexer.get_indexed_paths()
             if indexed_paths:
